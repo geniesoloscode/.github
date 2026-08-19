@@ -1,0 +1,90 @@
+name: GS Commit Digest (reusable)
+
+# Lives ONCE in the organization's special repo: geniesoloscode/.github at
+#   .github/workflows/gs-commit-digest.yml
+# Every other repo calls it with the 8-line caller file (see gs-commit-digest-caller.yml),
+# so the logic is maintained in one place and new repos opt in with one tiny file.
+#
+# Secrets: set once at the organization level (Settings > Secrets and variables >
+# Actions > New organization secret, repository access: All repositories):
+#   GS_MAIL_USER          geniesolostech@gmail.com
+#   GS_MAIL_APP_PASSWORD  a Gmail App Password (Google Account > Security > 2-Step
+#                         Verification > App passwords), 16 characters
+# On GitHub Free, organization secrets can be shared with public repositories, which is
+# what the geniesoloscode repos are.
+#
+# What it does: on every push to any branch of the calling repo, emails one digest
+# ("GS Commit: <repo> (<branch>) N commit(s)") to Gene's Gmail. A Gmail filter on that
+# subject prefix files it under GS/Commits and skips the inbox; the GS Weekly and
+# Monthly updates read that label.
+
+on:
+  workflow_call:
+    secrets:
+      GS_MAIL_USER:
+        required: true
+      GS_MAIL_APP_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      # Inside a reusable workflow, actions/checkout checks out the CALLING repo,
+      # and github.* refers to the caller's event. That is what we want.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Build the digest
+        id: digest
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          PUSHER: ${{ github.actor }}
+          COMPARE: ${{ github.event.compare }}
+        run: |
+          set -euo pipefail
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            LOGRANGE="--max-count=20 $AFTER"
+            DIFFRANGE="$AFTER~1..$AFTER"
+          else
+            LOGRANGE="$BEFORE..$AFTER"
+            DIFFRANGE="$BEFORE..$AFTER"
+          fi
+          COUNT=$(git rev-list --count $LOGRANGE)
+          {
+            echo "GS Commit Digest"
+            echo "Repo: $REPO"
+            echo "Branch: $BRANCH"
+            echo "Pushed by: $PUSHER"
+            echo "Commits: $COUNT"
+            echo "Compare: $COMPARE"
+            echo
+            echo "Commits:"
+            git log $LOGRANGE --date=short --pretty=format:'- %ad %h %s (%an)'
+            echo
+            echo
+            echo "Files changed:"
+            git diff --stat $DIFFRANGE 2>/dev/null | tail -n 40 || echo "(diff unavailable)"
+          } > digest.txt
+          echo "subject=GS Commit: $REPO ($BRANCH) $COUNT commit(s)" >> "$GITHUB_OUTPUT"
+
+      - name: Email the digest
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.GS_MAIL_USER }}
+          password: ${{ secrets.GS_MAIL_APP_PASSWORD }}
+          subject: ${{ steps.digest.outputs.subject }}
+          to: geniesolostech@gmail.com
+          from: GenieSolos Commits <geniesolostech@gmail.com>
+          body: file://digest.txt

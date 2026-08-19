@@ -1,0 +1,6 @@
+{
+  "name": "GS Commit Digest",
+  "description": "Email a GS Commit digest to Gene on every push (GenieSolos weekly and monthly updates read it).",
+  "iconName": "octicon mail",
+  "categories": ["Automation"]
+}
