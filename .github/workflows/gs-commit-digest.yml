@@ -35,7 +35,12 @@ jobs:
     steps:
       # Inside a reusable workflow, actions/checkout checks out the CALLING repo,
       # and github.* refers to the caller's event. That is what we want.
-      - uses: actions/checkout@v4
+      #
+      # Pinned to a full commit SHA, not a tag. This workflow runs with the
+      # organization's Gmail app password in scope, so an action that could be
+      # repointed at new code by its owner is a direct path to that secret.
+      # The trailing comment is the version that SHA corresponds to.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 50
 
@@ -77,7 +82,7 @@ jobs:
           echo "subject=GS Commit: $REPO ($BRANCH) $COUNT commit(s)" >> "$GITHUB_OUTPUT"
 
       - name: Email the digest
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@4226df7daafa6fc901a43789c49bf7ab309066e7 # v3.11.0
         with:
           server_address: smtp.gmail.com
           server_port: 465
